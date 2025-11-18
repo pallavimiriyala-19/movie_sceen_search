@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: highlevel_postgres
+    environment:
+      POSTGRES_DB: moviesearch
+      POSTGRES_USER: msuser
+      POSTGRES_PASSWORD: mssecret
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - msnet
+
+  backend:
+    build: ./backend
+    container_name: highlevel_backend
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://msuser:mssecret@postgres/moviesearch
+      - JELLYFIN_HOST=http://192.168.9.184:8096
+      - JELLYFIN_API_KEY=50a1d31279e54658837a96700c4bb472
+    volumes:
+      - ./data:/data
+      - ./backend:/app
+      - /home/mango201/models:/models 
+    ports:
+      - "8000:8000"
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+    extra_hosts:
+      - "jellyfin:192.168.9.184"
+    networks:
+      - msnet
+
+  indexer:
+    build: ./indexer
+    container_name: highlevel_indexer
+    depends_on:
+      - backend
+    environment:
+      - DATABASE_URL=postgresql://msuser:mssecret@postgres/moviesearch
+      - JELLYFIN_HOST=http://192.168.9.184:8096
+      - JELLYFIN_API_KEY=50a1d31279e54658837a96700c4bb472
+      - INSIGHTFACE_USE_GPU=False
+      - TORCH_DISABLE_MPS_FALLBACK=1
+      - NUMBA_DISABLE_JIT=1
+      - ONNX_DISABLE_CUSTOM_OPS=1
+    volumes:
+      - ./data:/data
+      - ./indexer:/indexer
+      - ./insightface/models:/root/.insightface/models
+    extra_hosts:
+      - "jellyfin:192.168.9.184"
+    command: tail -f /dev/null
+    networks:
+      - msnet 
+
+networks:
+  msnet:
+    driver: bridge

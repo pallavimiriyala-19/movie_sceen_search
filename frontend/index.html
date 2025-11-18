@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🎬 Movie Scene Search</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body {
+      background: linear-gradient(135deg, #0a192f, #112240);
+      color: #f0f6fc;
+      font-family: 'Inter', sans-serif;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 40px auto;
+    }
+    .scene-card img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 10px;
+    }
+    .glass-box {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    input, select {
+      background: #ffffff;
+      color: #111;
+    }
+    input::placeholder {
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container px-4">
+
+    <h1 class="text-center text-4xl font-extrabold mb-6 tracking-wide">
+      🎬 Movie Scene Search
+    </h1>
+
+    <div class="glass-box mb-6">
+      <div class="flex flex-wrap gap-3">
+        <input id="searchInput"
+          class="flex-1 px-4 py-2 rounded-lg border shadow-sm"
+          placeholder="Search anything (fight, 3 people talking, car...)" />
+
+        <input id="objectInput"
+          class="px-4 py-2 rounded-lg border shadow-sm"
+          style="width:220px"
+          placeholder="Object (optional)" />
+
+        <select id="actorSelect"
+          class="px-4 py-2 rounded-lg border shadow-sm bg-white text-black"
+          style="width:250px">
+          <option value="">-- Loading actors... --</option>
+        </select>
+
+        <button id="searchBtn"
+          class="px-6 py-2 bg-blue-600 hover:bg-blue-700 transition rounded-lg text-white font-semibold shadow-md">
+          Search
+        </button>
+      </div>
+
+      <div id="status" class="mt-3 text-sm text-yellow-300"></div>
+    </div>
+
+    <div id="resultsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

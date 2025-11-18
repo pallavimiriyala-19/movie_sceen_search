@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+psycopg2-binary
+pydantic
+python-multipart
+sqlalchemy
+alembic
+requests
+pillow
+celery[redis]==5.3.6
+python-dotenv
+faiss-cpu
+sentence-transformers

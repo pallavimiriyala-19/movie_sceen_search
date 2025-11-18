@@ -1,0 +1,18 @@
+insightface==0.7.3
+onnxruntime
+opencv-python-headless
+psycopg2-binary
+faiss-cpu
+requests
+pillow
+celery[redis]==5.3.6
+scenedetect==0.6.2
+numpy
+pandas
+ultralytics        # YOLOv8 (object detection)
+transformers>=4.30.0
+sentence-transformers
+torch>=2.0.0        # choose appropriate CUDA or CPU build in production
+ftfy
+accelerate         # optional (helps for transformers)
+
