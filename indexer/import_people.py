@@ -44,7 +44,7 @@ def process_actor_image(actor_id, img_path):
             (actor_id, target_path, embedding, 1.0)
         )
         conn.commit()
-        print(f"✅ Saved face for {actor_id}")
+        print(f" Saved face for {actor_id}")
     except Exception as e:
         print(f"Error processing {img_path}: {e}")
 

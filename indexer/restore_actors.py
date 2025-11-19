@@ -38,7 +38,7 @@ def restore_actors():
                 with open(json_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except Exception as e:
-                print(f"❌ Failed reading {json_path}: {e}")
+                print(f"Failed reading {json_path}: {e}")
                 continue
 
             name = data.get("Name") or data.get("name") or actor_folder
@@ -77,7 +77,7 @@ def restore_actors():
 
             except Exception as e:
                 conn.rollback()
-                print(f"❌ Failed inserting {name}: {e}")
+                print(f" Failed inserting {name}: {e}")
 
     conn.close()
     print(f"\n🎉 Completed! Inserted={total_inserted}, Skipped={total_skipped}")

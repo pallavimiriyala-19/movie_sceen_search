@@ -40,7 +40,7 @@ best_actor_id = actor_ids[indices[0][0]]
 
 cur.execute("SELECT name FROM actors WHERE actor_id = %s", (best_actor_id,))
 actor_name = cur.fetchone()[0]
-print(f"🧩 Closest match: {actor_name} (distance: {distances[0][0]:.4f})")
+print(f"Closest match: {actor_name} (distance: {distances[0][0]:.4f})")
 
 cur.close()
 conn.close()
