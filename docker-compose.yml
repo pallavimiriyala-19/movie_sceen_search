@@ -1,8 +1,8 @@
-version: "3.8"
+
 
 services:
   postgres:
-    image: postgres:15
+    image: ankane/pgvector:latest
     container_name: highlevel_postgres
     environment:
       POSTGRES_DB: moviesearch

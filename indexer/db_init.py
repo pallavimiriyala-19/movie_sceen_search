@@ -1,25 +1,26 @@
-#  --- command to make it exccutable
-#run inside the indexer container (one-time)
-#      docker exec -it highlevel_indexer python3 /indexer/db_init.py
-
-
-
 #!/usr/bin/env python3
-"""
-idempotent DB initializer for movie_scene_search.
 
-Run this once (or at container start) to ensure:
- - pgvector extension installed if possible
- - required tables exist (CREATE IF NOT EXISTS)
- - required columns exist (ALTER TABLE ADD COLUMN IF NOT EXISTS)
-This script is safe to run multiple times.
 """
+Final idempotent DB initializer for movie_sceen_search (original/code-compatible schema).
 
+Creates the original tables you provided (actors, actor_faces, scenes, scene_actor_presence,
+scene_attributes, scene_embeddings) with the exact column names and types your code expects.
+
+Behavior:
+ - Attempts to CREATE EXTENSION vector (pgvector) if available and falls back to FLOAT8[].
+ - Uses CREATE TABLE IF NOT EXISTS to be safe on repeated runs.
+ - Runs ALTER TABLE ... ADD COLUMN IF NOT EXISTS for a small set of safe migrations
+   (e.g. adding confidence, frame_path) so older DBs get updated automatically.
+ - Safe to run multiple times.
+
+Run inside the indexer container:
+    docker exec -it highlevel_indexer python3 /indexer/db_init.py
+"""
 import os
 import sys
 import psycopg2
-from psycopg2 import sql
 from psycopg2.extras import register_default_json
+from psycopg2 import sql
 
 DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
 
@@ -36,11 +37,9 @@ def extension_exists(cur, ext_name: str) -> bool:
 def try_create_extension(cur, ext_name: str):
     try:
         cur.execute(sql.SQL("CREATE EXTENSION IF NOT EXISTS {}").format(sql.Identifier(ext_name)))
-        return True
     except Exception as e:
-        # Can't install extension (maybe not available in this image) — bail silently
-        print(f"[db_init] cannot CREATE EXTENSION {ext_name}: {e}")
-        return False
+        # Not fatal — extension may not be present in image
+        print(f"[db_init] could not create extension {ext_name}: {e}")
 
 
 def run():
@@ -49,129 +48,99 @@ def run():
     cur = conn.cursor()
     register_default_json(cur)
 
-    # Try to install pgvector if available in the Postgres image
+    print("[db_init] checking/creating pgvector extension...")
+    try_create_extension(cur, "vector")
     vector_supported = False
     try:
-        print("[db_init] checking/creating pgvector extension...")
-        try_create_extension(cur, "vector")
         vector_supported = extension_exists(cur, "vector")
-        print(f"[db_init] pgvector supported={vector_supported}")
-    except Exception as e:
-        print(f"[db_init] pgvector check/create failed: {e}")
+    except Exception:
         vector_supported = False
+    print(f"[db_init] pgvector supported={vector_supported}")
 
     # Choose column types depending on vector availability
-    actor_emb_col = "VECTOR(512)" if vector_supported else "double precision[]"
-    scene_emb_col = "VECTOR(384)" if vector_supported else "double precision[]"
+    actor_emb_col = "VECTOR(512)" if vector_supported else "FLOAT8[]"
+    scene_emb_col = "VECTOR(384)" if vector_supported else "FLOAT8[]"
 
-    # Use SQL strings with IF NOT EXISTS (Postgres supports "CREATE TABLE IF NOT EXISTS")
-    # Create main tables
+    # Create tables exactly matching your original schema
     statements = [
+        # pgcrypto extension for gen_random_uuid (if not present)
+        "CREATE EXTENSION IF NOT EXISTS pgcrypto;",
 
         # actors
-        f"""
+        """
         CREATE TABLE IF NOT EXISTS actors (
-            actor_id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            folder_path TEXT,
-            thumbnail_path TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
+          actor_id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          aliases TEXT[] DEFAULT '{}',
+          jellyfin_person_id TEXT,
+          created_at TIMESTAMP DEFAULT now()
         );
         """,
 
-        # actor_faces
+        # actor_faces (face embeddings) — using file_path and FLOAT8[] (or pgvector)
         f"""
         CREATE TABLE IF NOT EXISTS actor_faces (
-            id SERIAL PRIMARY KEY,
-            actor_id INT REFERENCES actors(actor_id) ON DELETE CASCADE,
-            image_path TEXT NOT NULL,
-            embedding {actor_emb_col},
-            created_at TIMESTAMP DEFAULT NOW()
+          face_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          actor_id INT REFERENCES actors(actor_id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          embedding {actor_emb_col},
+          quality FLOAT8,
+          source_item_id TEXT,
+          created_at TIMESTAMP DEFAULT now()
         );
         """,
 
-        # movies
-        """
-        CREATE TABLE IF NOT EXISTS movies (
-            movie_id SERIAL PRIMARY KEY,
-            filename TEXT NOT NULL,
-            duration_ms INT,
-            created_at TIMESTAMP DEFAULT NOW()
-        );
-        """,
-
-        # scenes
+        # scenes (original code expectation)
         """
         CREATE TABLE IF NOT EXISTS scenes (
-            scene_id SERIAL PRIMARY KEY,
-            movie_id INT REFERENCES movies(movie_id) ON DELETE CASCADE,
-            start_ms INT NOT NULL,
-            end_ms INT NOT NULL,
-            thumbnail_path TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
+          scene_id SERIAL PRIMARY KEY,
+          movie_name TEXT,
+          start_time DOUBLE PRECISION,
+          end_time DOUBLE PRECISION,
+          duration DOUBLE PRECISION,
+          thumbnail_path TEXT
         );
         """,
 
-        # scene_actor_presence
+        # scene_actor_presence (original schema plus allowance for later 'confidence' and 'frame_path')
         """
         CREATE TABLE IF NOT EXISTS scene_actor_presence (
-            id SERIAL PRIMARY KEY,
-            scene_id INT REFERENCES scenes(scene_id) ON DELETE CASCADE,
-            actor_id INT REFERENCES actors(actor_id) ON DELETE CASCADE,
-            confidence DOUBLE PRECISION,
-            face_conf DOUBLE PRECISION,
-            frame_path TEXT,
-            visible_ms INT DEFAULT 0,
-            first_seen_ms INT,
-            last_seen_ms INT,
-            created_at TIMESTAMP DEFAULT NOW()
+          id SERIAL PRIMARY KEY,
+          scene_id INT REFERENCES scenes(scene_id) ON DELETE CASCADE,
+          actor_id INT REFERENCES actors(actor_id),
+          face_conf FLOAT8,
+          visible_ms INT,
+          first_seen_ms INT,
+          last_seen_ms INT
         );
         """,
 
         # scene_attributes
         """
         CREATE TABLE IF NOT EXISTS scene_attributes (
-            scene_id INT PRIMARY KEY REFERENCES scenes(scene_id) ON DELETE CASCADE,
-            objects TEXT[],
-            caption TEXT,
-            tags TEXT[],
-            updated_at TIMESTAMP DEFAULT NOW()
+          scene_id INT PRIMARY KEY REFERENCES scenes(scene_id) ON DELETE CASCADE,
+          objects TEXT[] DEFAULT '{}',
+          caption TEXT,
+          tags TEXT[] DEFAULT '{}',
+          updated_at TIMESTAMP DEFAULT now()
         );
         """,
 
         # scene_embeddings
         f"""
         CREATE TABLE IF NOT EXISTS scene_embeddings (
-            scene_id INT PRIMARY KEY REFERENCES scenes(scene_id) ON DELETE CASCADE,
-            embedding {scene_emb_col},
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
-        """,
-
-        # meta tables
-        """
-        CREATE TABLE IF NOT EXISTS scene_faiss_meta (
-            id SERIAL PRIMARY KEY,
-            scene_id INT UNIQUE REFERENCES scenes(scene_id) ON DELETE CASCADE,
-            index_offset INT
-        );
-        """,
-
-        """
-        CREATE TABLE IF NOT EXISTS actor_faiss_meta (
-            id SERIAL PRIMARY KEY,
-            actor_id INT UNIQUE REFERENCES actors(actor_id) ON DELETE CASCADE,
-            index_offset INT
+          scene_id INT PRIMARY KEY REFERENCES scenes(scene_id) ON DELETE CASCADE,
+          embedding {scene_emb_col} DEFAULT '{{}}',
+          updated_at TIMESTAMP DEFAULT now()
         );
         """,
     ]
 
-    # Run create statements
     try:
         for s in statements:
             cur.execute(s)
         conn.commit()
-        print("[db_init] created/verified tables.")
+        print("[db_init] created/verified tables (original schema).")
     except Exception as e:
         conn.rollback()
         print("[db_init] ERROR creating tables:", e)
@@ -179,18 +148,23 @@ def run():
         conn.close()
         sys.exit(1)
 
-    # Now run idempotent ALTER TABLE ADD COLUMN IF NOT EXISTS for known missing columns issues (e.g. confidence)
+    # Safe idempotent migrations to add columns that your current code uses but original schema might not have
     migrations = [
-        "ALTER TABLE scene_actor_presence ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION;",
-        "ALTER TABLE scene_actor_presence ADD COLUMN IF NOT EXISTS face_conf DOUBLE PRECISION;",
-        "ALTER TABLE scene_actor_presence ADD COLUMN IF NOT EXISTS frame_path TEXT;",
-        # Any future safe migrations can be appended here
-    ]
+    "ALTER TABLE scene_actor_presence ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION;",
+    "ALTER TABLE scene_actor_presence ADD COLUMN IF NOT EXISTS frame_path TEXT;",
+
+    # actor_faces from original schema
+    "ALTER TABLE actor_faces ADD COLUMN IF NOT EXISTS file_path TEXT;",
+    "ALTER TABLE actor_faces ADD COLUMN IF NOT EXISTS embedding FLOAT8[];",
+    "ALTER TABLE actor_faces ADD COLUMN IF NOT EXISTS quality FLOAT8;",
+    "ALTER TABLE actor_faces ADD COLUMN IF NOT EXISTS source_item_id TEXT;"
+]
+
     try:
         for m in migrations:
             cur.execute(m)
         conn.commit()
-        print("[db_init] applied safe migrations (if any).")
+        print("[db_init] applied safe migrations (added any missing columns).")
     except Exception as e:
         conn.rollback()
         print("[db_init] ERROR applying migrations:", e)
