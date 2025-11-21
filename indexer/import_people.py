@@ -4,9 +4,7 @@ from insightface.app import FaceAnalysis
 from PIL import Image
 import numpy as np
 
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
-PEOPLE_PATH = "/data/People"
-FACES_DIR = "/data/faces"
+from indexer.config import DB_URL, PEOPLE_PATH, FACES_DIR
 
 # Connect to DB
 conn = psycopg2.connect(DB_URL)

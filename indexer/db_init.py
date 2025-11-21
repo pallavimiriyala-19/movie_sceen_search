@@ -22,7 +22,7 @@ import psycopg2
 from psycopg2.extras import register_default_json
 from psycopg2 import sql
 
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
+from indexer.config import DB_URL
 
 
 def get_conn():

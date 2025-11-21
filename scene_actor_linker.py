@@ -6,10 +6,7 @@ import pickle
 from PIL import Image
 from insightface.app import FaceAnalysis
 
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
-FRAMES_DIR = "/data/frames"
-FAISS_PATH = "/data/faiss/actor_gallery.index"
-META_PATH = "/data/faiss/actor_metadata.pkl"
+from indexer.config import DB_URL, FRAMES_DIR, ACTOR_INDEX_PATH as FAISS_PATH, ACTOR_META_PATH as META_PATH
 
 # Load FAISS index
 index = faiss.read_index(FAISS_PATH)
