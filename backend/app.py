@@ -19,8 +19,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from indexer.config import DB_URL, FRAMES_DIR, SCENE_INDEX_PATH, SCENE_META_PATH
+
+
 def get_conn():
-    return psycopg2.connect(os.getenv("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch"))
+    return psycopg2.connect(DB_URL)
 
 # Actors (keeps previous working query)
 @app.get("/actors")
@@ -91,7 +94,7 @@ def search_by_tag(tag: str = Query(..., min_length=1)):
 # frame file endpoint (unchanged)
 @app.get("/frame/{scene_id}")
 def get_frame(scene_id: int):
-    frame_path = f"/data/frames/scene_{scene_id}.jpg"
+    frame_path = os.path.join(FRAMES_DIR, f"scene_{scene_id}.jpg")
     if os.path.exists(frame_path):
         return FileResponse(frame_path)
     return {"error": "Frame not found"}
@@ -108,7 +111,6 @@ from fastapi import Query
 import numpy as np
 import pickle
 
-FAISS_DIR = "/data/faiss"
 LOCAL_MODEL_PATH = "/models/sentence-transformers/all-MiniLM-L6-v2"
 
 # Load sentence transformer model
@@ -123,8 +125,8 @@ except Exception as e:
 # Load FAISS index + metadata
 try:
     import faiss
-    scene_index = faiss.read_index(f"{FAISS_DIR}/scene_index.faiss")
-    with open(f"{FAISS_DIR}/scene_meta.pkl", "rb") as f:
+    scene_index = faiss.read_index(SCENE_INDEX_PATH)
+    with open(SCENE_META_PATH, "rb") as f:
         scene_meta = pickle.load(f)
     print("📁 FAISS scene index loaded.")
 except Exception as e:

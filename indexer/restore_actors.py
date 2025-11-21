@@ -1,23 +1,25 @@
 import os
-import json
+import faiss
+import numpy as np
 import psycopg2
+import pickle
+import json
+from PIL import Image
+from insightface.app import FaceAnalysis
 
-DB_URL = os.getenv("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
-PEOPLE_DIR = "/data/People"
+from indexer.config import DB_URL, PEOPLE_PATH
 
-def get_conn():
-    return psycopg2.connect(DB_URL)
 
 def restore_actors():
-    conn = get_conn()
+    conn = psycopg2.connect(DB_URL)
     cur = conn.cursor()
 
     total_inserted = 0
     total_skipped = 0
 
     # Loop A, B, C... folders
-    for letter in sorted(os.listdir(PEOPLE_DIR)):
-        letter_path = os.path.join(PEOPLE_DIR, letter)
+    for letter in sorted(os.listdir(PEOPLE_PATH)):
+        letter_path = os.path.join(PEOPLE_PATH, letter)
         if not os.path.isdir(letter_path):
             continue
 

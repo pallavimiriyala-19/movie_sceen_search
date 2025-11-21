@@ -1,19 +1,33 @@
 import os
+import re
+import sys
+import logging
+import pickle
 import numpy as np
 import psycopg2
 import faiss
-import pickle
 from PIL import Image
 from insightface.app import FaceAnalysis
 
 
 # =======================
-# CONFIG
+# CONFIG (centralized)
 # =======================
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@highlevel_postgres/moviesearch")
-FRAMES_DIR = "/data/frames"
-FAISS_PATH = "/data/faiss/actor_gallery.index"
-META_PATH = "/data/faiss/actor_metadata.pkl"
+from indexer.config import (
+    DB_URL,
+    FRAMES_DIR,
+    ACTOR_INDEX_PATH as FAISS_PATH,
+    ACTOR_META_PATH as META_PATH,
+    MIN_MATCH_CONFIDENCE as MIN_CONFIDENCE,
+)
+from indexer.utils import extract_scene_id
+
+
+# =======================
+# Logging
+# =======================
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+logger = logging.getLogger("scene_actor_linker")
 
 
 # =======================
@@ -24,42 +38,106 @@ def connect_db():
 
 
 def load_faiss_index():
-    print("Loading FAISS index & metadata...")
-    index = faiss.read_index(FAISS_PATH)
+    logger.info("Loading FAISS index & metadata from %s and %s", FAISS_PATH, META_PATH)
 
-    with open(META_PATH, "rb") as f:
-        actor_ids = pickle.load(f)
+    if not os.path.exists(FAISS_PATH):
+        logger.error("FAISS index not found at %s", FAISS_PATH)
+        raise FileNotFoundError(FAISS_PATH)
+    if not os.path.exists(META_PATH):
+        logger.error("FAISS metadata not found at %s", META_PATH)
+        raise FileNotFoundError(META_PATH)
 
-    print(f"Loaded {len(actor_ids)} actor embeddings.")
+    try:
+        index = faiss.read_index(FAISS_PATH)
+    except Exception as e:
+        logger.exception("Failed to read FAISS index: %s", e)
+        raise
+
+    try:
+        with open(META_PATH, "rb") as f:
+            actor_ids = pickle.load(f)
+    except Exception as e:
+        logger.exception("Failed to load actor metadata: %s", e)
+        raise
+
+    # Basic validation
+    try:
+        ntotal = index.ntotal
+    except Exception:
+        ntotal = None
+
+    if ntotal is not None and len(actor_ids) != ntotal:
+        logger.warning("actor_ids length (%d) != FAISS index ntotal (%s)", len(actor_ids), ntotal)
+
+    logger.info("Loaded %d actor embeddings (FAISS ntotal=%s)", len(actor_ids), ntotal)
     return index, actor_ids
 
 
 def init_face_model():
-    print("Initializing InsightFace model...")
-    app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
+    logger.info("Initializing InsightFace model (buffalo_l) in CPU mode")
+    app = FaceAnalysis(name="buffalo_l", allowed_modules=["detection", "recognition"])
     app.prepare(ctx_id=-1)  # CPU mode
     return app
 
 
 def process_frame(frame_path, index, actor_ids, app):
-    """Detect faces, match embeddings, return results."""
-    img = np.array(Image.open(frame_path).convert("RGB"))
-    faces = app.get(img)
+    """Detect faces, match embeddings; returns list of (actor_id, confidence)."""
+    try:
+        img = np.array(Image.open(frame_path).convert("RGB"))
+    except Exception:
+        logger.exception("Failed to open frame: %s", frame_path)
+        return []
+
+    faces = []
+    try:
+        faces = app.get(img)
+    except Exception:
+        logger.exception("Face detection failed for %s", frame_path)
+        return []
 
     if not faces:
         return []
 
     results = []
 
+    # Guard: ensure index has vectors
+    if getattr(index, "ntotal", 0) == 0:
+        logger.error("FAISS index is empty (ntotal=0)")
+        return []
+
     for face in faces:
+        if not hasattr(face, "embedding") or face.embedding is None:
+            logger.debug("Skipping face without embedding in %s", frame_path)
+            continue
+
         emb = face.embedding.astype("float32").reshape(1, -1)
-        distances, indices = index.search(emb, 1)
 
-        best_idx = indices[0][0]
+        # Validate embedding dim vs index
+        try:
+            d = index.d
+            if emb.shape[1] != d:
+                logger.warning("Embedding dim (%d) != FAISS dim (%d). Skipping.", emb.shape[1], d)
+                continue
+        except Exception:
+            # If index doesn't expose d, continue and let faiss handle shape mismatch
+            pass
+
+        try:
+            distances, indices = index.search(emb, 1)
+        except Exception:
+            logger.exception("FAISS search failed for frame %s", frame_path)
+            continue
+
+        # indices may contain -1 if no result
+        best_idx = int(indices[0][0])
+        if best_idx < 0 or best_idx >= len(actor_ids):
+            logger.debug("FAISS returned invalid index %s for %s", best_idx, frame_path)
+            continue
+
         best_actor_id = actor_ids[best_idx]
-
         distance = float(distances[0][0])
-        confidence = round(1 / (1 + distance), 4)
+        # simple confidence transform
+        confidence = round(1 / (1 + distance), 4) if distance is not None else 0.0
 
         results.append((best_actor_id, confidence))
 
@@ -70,139 +148,70 @@ def process_frame(frame_path, index, actor_ids, app):
 # MAIN PIPELINE FUNCTION
 # =======================
 def run():
-    print("\n Running Scene-Actor Linker...")
+    logger.info("Starting Scene-Actor Linker")
 
     # Load FAISS and model ONCE
     index, actor_ids = load_faiss_index()
     app = init_face_model()
 
-    # Connect to DB
-    conn = connect_db()
-    cur = conn.cursor()
+    # Connect to DB using context manager
+    try:
+        with connect_db() as conn:
+            cur = conn.cursor()
 
-    # Process frames
-    for file in sorted(os.listdir(FRAMES_DIR)):
-        if not file.endswith(".jpg"):
-            continue
+            # Process frames
+            if not os.path.isdir(FRAMES_DIR):
+                logger.error("Frames directory does not exist: %s", FRAMES_DIR)
+                return
 
-        frame_path = os.path.join(FRAMES_DIR, file)
+            for file in sorted(os.listdir(FRAMES_DIR)):
+                if not file.lower().endswith(".jpg"):
+                    continue
 
-        # Extract scene_id from filename
-        # Expected format: <movie>_scene_XX.jpg
-        try:
-            scene_id = int(file.split("_scene_")[1].split(".")[0])
-        except:
-            print(f" Could not parse scene ID from: {file}")
-            continue
+                frame_path = os.path.join(FRAMES_DIR, file)
 
-        matches = process_frame(frame_path, index, actor_ids, app)
+                # Extract scene_id using helper (dependency-free, unit-tested)
+                scene_id = extract_scene_id(file)
+                if scene_id is None:
+                    logger.warning("Could not parse scene ID from filename: %s", file)
+                    continue
 
-        if not matches:
-            print(f"No faces detected in {file}")
-            continue
+                matches = process_frame(frame_path, index, actor_ids, app)
 
-        for actor_id, confidence in matches:
-            cur.execute(
-                """
-                INSERT INTO scene_actor_presence (scene_id, actor_id, confidence, frame_path)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (scene_id, actor_id, confidence, frame_path)
-            )
+                if not matches:
+                    logger.info("No faces detected in %s", file)
+                    continue
 
-            print(f"  Scene {scene_id}: actor={actor_id}, conf={confidence}")
+                for actor_id, confidence in matches:
+                    if confidence < MIN_CONFIDENCE:
+                        logger.debug("Skipping low-confidence match for actor %s in scene %s: %.3f", actor_id, scene_id, confidence)
+                        continue
 
-    conn.commit()
-    cur.close()
-    conn.close()
+                    # Insert only if not exists (avoid depending on a unique constraint)
+                    try:
+                        cur.execute(
+                            """
+                            INSERT INTO scene_actor_presence (scene_id, actor_id, confidence, frame_path)
+                            SELECT %s, %s, %s, %s
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM scene_actor_presence WHERE scene_id=%s AND actor_id=%s AND frame_path=%s
+                            )
+                            """,
+                            (scene_id, actor_id, confidence, frame_path, scene_id, actor_id, frame_path),
+                        )
+                        logger.info("Scene %s: actor=%s, conf=%.4f", scene_id, actor_id, confidence)
+                    except Exception:
+                        logger.exception("DB insert failed for scene %s actor %s", scene_id, actor_id)
 
-    print("\n🎉 Scene–Actor Linking Complete!")
+            conn.commit()
+            cur.close()
+    except Exception:
+        logger.exception("Database connection failed or pipeline interrupted")
+
+    logger.info("Scene–Actor Linking Complete")
+
 
 
 # Allow standalone execution
 if __name__ == "__main__":
     run()
-
-
-
-
-"""import os
-import numpy as np
-import psycopg2
-import faiss
-import pickle
-from PIL import Image
-from insightface.app import FaceAnalysis
-
-# =======================
-# CONFIG
-# =======================
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://msuser:mssecret@postgres/moviesearch")
-FRAMES_DIR = "/data/frames"
-FAISS_PATH = "/data/faiss/actor_gallery.index"
-META_PATH = "/data/faiss/actor_metadata.pkl"
-
-# =======================
-# LOAD FAISS INDEX & METADATA
-# =======================
-print("📦 Loading FAISS index and metadata...")
-index = faiss.read_index(FAISS_PATH)
-with open(META_PATH, "rb") as f:
-    actor_ids = pickle.load(f)
-print(f"✅ Loaded {len(actor_ids)} actor embeddings")
-
-# =======================
-# CONNECT TO DATABASE
-# =======================
-print("🗃️ Connecting to database...")
-conn = psycopg2.connect(DB_URL)
-cur = conn.cursor()
-
-# =======================
-# INITIALIZE FACE MODEL
-# =======================
-app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection','recognition'])
-app.prepare(ctx_id=-1)  # CPU mode
-
-print("🎬 Starting scene analysis...")
-
-# =======================
-# PROCESS EACH SCENE FRAME
-# =======================
-for file in sorted(os.listdir(FRAMES_DIR)):
-    if not file.endswith(".jpg"):
-        continue
-
-    frame_path = os.path.join(FRAMES_DIR, file)
-    scene_id = int(file.split('_')[1].split('.')[0])
-
-    img = np.array(Image.open(frame_path).convert("RGB"))
-    faces = app.get(img)
-
-    if not faces:
-        print(f"🚫 No faces detected in {file}")
-        continue
-
-    for face in faces:
-        emb = face.embedding.astype('float32').reshape(1, -1)
-        distances, indices = index.search(emb, 1)
-        best_idx = indices[0][0]
-        best_actor_id = actor_ids[best_idx]
-        distance = float(distances[0][0])
-        confidence = round(1 / (1 + distance), 4)
-
-        cur.execute(
-            '''
-            INSERT INTO scene_actor_presence (scene_id, actor_id, confidence, frame_path)
-            VALUES (%s, %s, %s, %s)
-            ''',
-            (scene_id, best_actor_id, confidence, frame_path)
-        )
-
-        print(f"✅ Scene {scene_id}: matched actor_id={best_actor_id}, conf={confidence}")
-
-conn.commit()
-cur.close()
-conn.close()
-print("🎉 Scene–actor linking complete!")
-"""
