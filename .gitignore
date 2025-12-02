@@ -1,38 +1,7 @@
-# Python artifacts
+.venv/
+venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-venv/
-.env
-.env.local
-
-# Docker Postgres data
+data/
 data/db/
-
-# Large runtime-generated folders
-data/frames/
-data/scenes/
-data/movies/
-data/faiss/
-data/thumbs/
-data/exports/
-
-# People faces (transfer manually)
-data/People/
-
-# InsightFace local model weights
-insightface/models/
-
-# Logs
-*.log
-
-# Backups
-data/db_backup/
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
+data/

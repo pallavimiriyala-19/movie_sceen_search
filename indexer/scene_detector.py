@@ -1,16 +1,11 @@
-import os
-import cv2
-import psycopg2
-from scenedetect import SceneManager, ContentDetector, open_video
 
-from indexer.config import DB_URL, MOVIE_DIR, SCENES_OUTPUT_DIR as OUTPUT_DIR
 
 import os
 import cv2
 import psycopg2
 from scenedetect import SceneManager, ContentDetector, open_video
 
-from indexer.config import DB_URL, MOVIE_DIR, SCENES_OUTPUT_DIR as OUTPUT_DIR
+from config import DB_URL, MOVIE_DIR, SCENES_OUTPUT_DIR as OUTPUT_DIR
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

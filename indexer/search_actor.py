@@ -6,7 +6,7 @@ import pickle
 from PIL import Image
 from insightface.app import FaceAnalysis
 
-from indexer.config import DB_URL, ACTOR_INDEX_PATH as index_path, ACTOR_META_PATH as meta_path
+from config import DB_URL, ACTOR_INDEX_PATH as index_path, ACTOR_META_PATH as meta_path
 
 # Load FAISS index and metadata
 index = faiss.read_index(index_path)

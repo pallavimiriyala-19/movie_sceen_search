@@ -13,14 +13,14 @@ from insightface.app import FaceAnalysis
 # =======================
 # CONFIG (centralized)
 # =======================
-from indexer.config import (
+from config import (
     DB_URL,
     FRAMES_DIR,
     ACTOR_INDEX_PATH as FAISS_PATH,
     ACTOR_META_PATH as META_PATH,
     MIN_MATCH_CONFIDENCE as MIN_CONFIDENCE,
 )
-from indexer.utils import extract_scene_id
+from utils import extract_scene_id
 
 
 # =======================
@@ -188,18 +188,20 @@ def run():
                         continue
 
                     # Insert only if not exists (avoid depending on a unique constraint)
+                    print("FOund match:", scene_id, actor_id, confidence)
                     try:
-                        cur.execute(
-                            """
-                            INSERT INTO scene_actor_presence (scene_id, actor_id, confidence, frame_path)
-                            SELECT %s, %s, %s, %s
-                            WHERE NOT EXISTS (
-                                SELECT 1 FROM scene_actor_presence WHERE scene_id=%s AND actor_id=%s AND frame_path=%s
+                       cur.execute(
+                                """
+                                INSERT INTO scene_actor_presence (scene_id, actor_id, face_conf)
+                                SELECT %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM scene_actor_presence
+                                    WHERE scene_id=%s AND actor_id=%s
+                                )
+                                """,
+                                (scene_id, actor_id, confidence, scene_id, actor_id),
                             )
-                            """,
-                            (scene_id, actor_id, confidence, frame_path, scene_id, actor_id, frame_path),
-                        )
-                        logger.info("Scene %s: actor=%s, conf=%.4f", scene_id, actor_id, confidence)
+                       logger.info("Scene %s: actor=%s, conf=%.4f", scene_id, actor_id, confidence)
                     except Exception:
                         logger.exception("DB insert failed for scene %s actor %s", scene_id, actor_id)
 

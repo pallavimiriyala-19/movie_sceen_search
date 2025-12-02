@@ -4,7 +4,7 @@ import numpy as np
 import faiss
 import pickle
 
-from indexer.config import DB_URL, FAISS_DIR, ACTOR_INDEX_PATH as INDEX_PATH, ACTOR_META_PATH as META_PATH
+from config import DB_URL, FAISS_DIR, ACTOR_INDEX_PATH as INDEX_PATH, ACTOR_META_PATH as META_PATH
 
 os.makedirs(FAISS_DIR, exist_ok=True)
 
@@ -89,5 +89,5 @@ def run():
 # Allow standalone usage
 if __name__ == "__main__":
     run()
-if __name__ == "__main__":
-    run()
+# if __name__ == "__main__":
+#     run()

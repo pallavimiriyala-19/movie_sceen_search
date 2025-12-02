@@ -1,7 +1,7 @@
 import os, psycopg2, requests, cv2, numpy as np
 from insightface.app import FaceAnalysis
 
-from indexer.config import DB_URL
+from config import DB_URL
 DB_URL = DB_URL
 JELLYFIN_HOST = os.environ.get("JELLYFIN_HOST")
 API_KEY = os.environ.get("JELLYFIN_API_KEY")

@@ -5,7 +5,7 @@ import numpy as np
 import faiss
 import pickle
 
-from indexer.config import DB_URL, FAISS_DIR, SCENE_INDEX_PATH, SCENE_META_PATH
+from config import DB_URL, FAISS_DIR, SCENE_INDEX_PATH, SCENE_META_PATH
 
 os.makedirs(FAISS_DIR, exist_ok=True)
 

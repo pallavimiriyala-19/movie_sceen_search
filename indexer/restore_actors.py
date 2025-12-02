@@ -7,7 +7,7 @@ import json
 from PIL import Image
 from insightface.app import FaceAnalysis
 
-from indexer.config import DB_URL, PEOPLE_PATH
+from config import DB_URL, PEOPLE_PATH
 
 
 def restore_actors():

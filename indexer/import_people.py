@@ -4,7 +4,7 @@ from insightface.app import FaceAnalysis
 from PIL import Image
 import numpy as np
 
-from indexer.config import DB_URL, PEOPLE_PATH, FACES_DIR
+from config import DB_URL, PEOPLE_PATH, FACES_DIR
 
 # Connect to DB
 conn = psycopg2.connect(DB_URL)

@@ -21,3 +21,4 @@ RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.
 RUN pip install --no-cache-dir ultralytics==8.*
 
 CMD ["python", "indexer.py"]
+

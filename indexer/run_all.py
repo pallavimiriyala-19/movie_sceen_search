@@ -5,7 +5,7 @@ print("🚀 Starting Full Movie Indexing Pipeline...")
 
 from scene_detector import run as run_scene_detector
 from extract_frames import run as run_extract_frames
-from scene_actor_linker import run as run_actor_linker
+from scene_actor_linker import run 
 from build_faiss_index import run as run_actor_faiss
 from build_scenes_faiss import run as run_scene_faiss
 from scene_attributes import run as run_scene_attributes
@@ -22,7 +22,7 @@ def main():
     run_extract_frames()
 
     print(" 3 Linking Actors to Scenes")
-    run_actor_linker()
+    run()
 
     print(" 4  Extracting Scene Attributes")
     run_scene_attributes()

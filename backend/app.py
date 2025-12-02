@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from indexer.config import DB_URL, FRAMES_DIR, SCENE_INDEX_PATH, SCENE_META_PATH
+from config import DB_URL, FRAMES_DIR, SCENE_INDEX_PATH, SCENE_META_PATH
 
 
 def get_conn():

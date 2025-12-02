@@ -1,55 +1,53 @@
-import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from ultralytics import YOLO
-from PIL import Image
-from sentence_transformers import SentenceTransformer
-from transformers import BlipForConditionalGeneration, BlipProcessor
-import numpy as np
+# import os
+# import psycopg2
+# from psycopg2.extras import RealDictCursor
+# from ultralytics import YOLO
+# from PIL import Image
+# from sentence_transformers import SentenceTransformer
+# from transformers import BlipForConditionalGeneration, BlipProcessor
+# import numpy as np
 
-from indexer.config import DB_URL, FRAMES_DIR
-
-if __name__ == "__main__":
-    run()
-# MAIN PIPELINE FUNCTION
-# =============================
-def run():
-    print("\n Running Scene Attributes Extractor...")
-
-    conn = connect_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-
-    cur.execute("SELECT scene_id, thumbnail_path FROM scenes ORDER BY scene_id;")
-    rows = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    for row in rows:
-        scene_id = row["scene_id"]
-        thumb = row["thumbnail_path"]
-
-        # If DB thumbnail not available, fallback to standard path
-        frame_path = thumb if thumb and os.path.exists(thumb) \
-            else os.path.join(FRAMES_DIR, f"scene_{scene_id}.jpg")
-
-        if not os.path.exists(frame_path):
-            print(f" Skipping scene {scene_id}, missing frame: {frame_path}")
-            continue
-
-        try:
-            process_scene(scene_id, frame_path)
-        except Exception as e:
-            print(f"Error processing scene {scene_id}: {e}")
-
-    print("\n🎉 Scene attribute extraction complete!")
+# from config import DB_URL, FRAMES_DIR
+# from build_faiss_index import connect_db
 
 
-# Allow standalone execution
-if __name__ == "__main__":
-    run()
+# # MAIN PIPELINE FUNCTION
+# # =============================
+# def run():
+#     print("\n Running Scene Attributes Extractor...")
+
+#     conn = connect_db()
+#     cur = conn.cursor(cursor_factory=RealDictCursor)
+
+#     cur.execute("SELECT scene_id, thumbnail_path FROM scenes ORDER BY scene_id;")
+#     rows = cur.fetchall()
+
+#     cur.close()
+#     conn.close()
+
+#     for row in rows:
+#         scene_id = row["scene_id"]
+#         thumb = row["thumbnail_path"]
+
+#         # If DB thumbnail not available, fallback to standard path
+#         frame_path = thumb if thumb and os.path.exists(thumb) \
+#             else os.path.join(FRAMES_DIR, f"scene_{scene_id}.jpg")
+
+#         if not os.path.exists(frame_path):
+#             print(f" Skipping scene {scene_id}, missing frame: {frame_path}")
+#             continue
+
+#         try:
+#             process_scene(scene_id, frame_path)
+#         except Exception as e:
+#             print(f"Error processing scene {scene_id}: {e}")
+
+#     print("\n🎉 Scene attribute extraction complete!")
 
 
+# # Allow standalone execution
+# if __name__ == "__main__":
+#     run()
 
 
 
@@ -83,7 +81,9 @@ if __name__ == "__main__":
 
 
 
-'''# indexer/scene_attributes.py
+
+
+
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -189,4 +189,3 @@ if __name__ == "__main__":
             process_scene(sid, frame_path)
         except Exception as e:
             print(f"Error processing scene {sid}: {e}")
-'''

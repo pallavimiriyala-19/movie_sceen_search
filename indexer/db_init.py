@@ -22,7 +22,7 @@ import psycopg2
 from psycopg2.extras import register_default_json
 from psycopg2 import sql
 
-from indexer.config import DB_URL
+from config import DB_URL
 
 
 def get_conn():
