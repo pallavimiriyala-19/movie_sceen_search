@@ -5,3 +5,4 @@ __pycache__/
 data/
 data/db/
 data/
+insightface/models/
